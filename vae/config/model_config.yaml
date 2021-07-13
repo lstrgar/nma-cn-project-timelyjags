@@ -1,0 +1,8 @@
+model_type: 'GlobalHiddenTrajectoryModel'
+rnn_dim: 256
+num_layers: 1 
+state_dim: 36 
+action_dim: 36
+seq_len: 45 
+z_dim: 1024 
+h_dim: 256 
