@@ -119,7 +119,7 @@ def main():
     train_data = algonauts_video(train_config['data_path'])
 	
 	# Preprocess the data
-    train_data = preprocess(train_data)
+    # train_data = preprocess(train_data)
 
 	# Create corresponding DataLoaders
     train_loader = DataLoader(train_data,

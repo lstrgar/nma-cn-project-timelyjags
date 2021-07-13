@@ -4,6 +4,8 @@ import random
 from torch.utils.data import Dataset
 from os import listdir
 from os.path import isfile, join
+from torchvision import transforms
+import torchvision.models
 # import cv2
 import torch
 
@@ -107,6 +109,8 @@ class algonauts_video(Dataset):
             dir_path (str): defines the directory where the mp4 videos are stored
         """
         self.load_videos(dir_path)
+        self.feat_extractor = torchvision.models.resnet34(pretrained=True)
+        self.feat_extractor.fc = torch.nn.Identity()
 
     def load_videos(self, dir_path):
         """
@@ -126,7 +130,22 @@ class algonauts_video(Dataset):
                 break
 
     def __getitem__(self, idx):
-        return self.videos[idx][:].reshape(45, -1)
+		# This is the video array
+        data = torch.tensor(self.videos[idx].data)
+		
+		# Define transform
+        data_transform = transforms.Compose([
+			transforms.Normalize(mean=[0.485, 0.456, 0.406],
+								 std=[0.229, 0.224, 0.225])
+        ])
+		
+        data = data.permute(0, 3, 1, 2)
+        data = data_transform(data.float())
+
+		# Apply pre-trained model to data
+        data =  self.feat_extractor(data)
+
+        return data
 
     def __len__(self):
         return torch.tensor(len(self.videos))

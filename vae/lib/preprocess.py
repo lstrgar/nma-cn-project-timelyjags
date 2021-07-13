@@ -1,35 +1,18 @@
 import torch
 import numpy as np
 from sklearn.decomposition import PCA
+import torchvision.models 
+from torchvision import transforms
 
-def normalize(data):
+def resnet_features(data):
 	"""
-	Normalize the data so that we don't get an overflow error in the loss
+	Extract resnet features from the end of the network, before the classification head
 	"""
-	for i in range(len(data.videos)):
-		data.videos[i].data = data.videos[i].data / 255
-		
-		# Check for some numerically unstable operation
-		if np.sum(np.isnan(data.videos[i].data)) > 0:
-			print('NaN found in normalization')
+	feat_extractor = torchvision.models.resnet34(pretrained=True)
+	feat_extractor.fc = torch.nn.Identity()
 	
-	return data
-	
-def img_pca(data):
-	"""
-	Fits a PCA model to all the images in the dataset and then transforms them
-	"""
-	# concatenate all the frames into one big numpy array
-	cat_vid = data.videos[0].data
-	for vid_idx in range(1, len(data.videos)):
-		cat_vid = np.concatenate((cat_vid, data.videos[vid_idx].data))
-		print('vid idx: ', vid_idx)
-	
-	print('stop')
+	return feat_extractor(data)
 
-	data = data.videosreshape(-1, 268*268)
-	pca = PCA(n_components = 20)
-	
 
 def preprocess(data):
 	"""
@@ -39,9 +22,13 @@ def preprocess(data):
 		preprocess_data (algonauts_videos): object where the numpy arrays containing the video
 			have been preprocessed
 	"""
-	data = normalize(data)
-	# data = img_pca(data)
+	
+	data = resnet_features(data)
+	
+	# Test fwd pass
+	# data = feat_extractor(torch.tensor(data.videos[0].data).permute(0,3,1,2).float())
 
+	return data
 
 if __name__ == "__main__":
 	print('something')
