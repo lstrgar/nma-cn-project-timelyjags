@@ -1,5 +1,5 @@
-data_path: "/home/andrewulmer/neuromatch/Algonauts2021_devkit/participants_data/AlgonautsVideos268_All_30fpsmax/"
+data_path: "/Users/luke/Desktop/participants_data/AlgonautsVideos268_All_30fpsmax/"
 num_epochs: 50
-batch_size: 10 
+batch_size: 10
 learning_rate: 0.0002
 save_name: 'video_recon'

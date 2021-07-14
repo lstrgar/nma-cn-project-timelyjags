@@ -6,13 +6,15 @@ from os import listdir
 from os.path import isfile, join
 from torchvision import transforms
 import torchvision.models
-# import cv2
 import torch
+from torchvision.transforms.transforms import Resize, ToTensor
+
 
 class Video:
     """
     Wrapper util for dealing with mp4 files in python
     """
+
     def __init__(self, path):
         """
         INPUTS:
@@ -34,17 +36,17 @@ class Video:
         # Drop last few frames so that video is divisible by 5
         if self.data.shape[0] % 5 != 0:
             num_to_remove -= self.data.shape[0] % 5
-            self.data = self.data[:-(self.data.shape[0]%5)]
+            self.data = self.data[: -(self.data.shape[0] % 5)]
 
         # Split video into chunks of 5 frames each - 5 chosen arbitrarily
-        self.data = np.split(self.data, int(self.data.shape[0]/5), axis=0)
+        self.data = np.split(self.data, int(self.data.shape[0] / 5), axis=0)
 
         # Iteratively drop frames from each chunk until we've matched lowest frame count (45)
         removed = 0
         i = 0
         while removed < num_to_remove:
             self.data[i] = self.data[i][:-1]
-            i = (i+1) % len(self.data)
+            i = (i + 1) % len(self.data)
             removed += 1
 
         # Concatenate all the splits)
@@ -57,8 +59,12 @@ class Video:
         """
         (num_frames x rows x columns x color_channels) --> 1D
         """
-        assert  len(self.data.shape) == 4, 'data is already in vector form'
+        assert len(self.data.shape) == 4, "data is already in vector form"
         return self.data.flatten()
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
 
 #    def play(self):
 #        """
@@ -68,7 +74,7 @@ class Video:
 #        cap = cv2.VideoCapture(self.path)
 #
 #        # Check if camera opened successfully
-#        if (cap.isOpened()== False): 
+#        if (cap.isOpened()== False):
 #          print("Error opening video  file")
 #
 #        # Read until video is completed
@@ -89,28 +95,37 @@ class Video:
 #          else:
 #            break
 #
-#        # When everything done, release 
+#        # When everything done, release
 #        # the video capture object
 #        cap.release()
 #
 #        # Closes all the frames
 #        cv2.destroyAllWindows()
 
-    def __getitem__(self, idx):
-        return self.data[idx]
 
-class algonauts_video(Dataset):
+class AlgonautsVideo(Dataset):
     """
     PyTorch Dataset wrapper for Algonauts videos
     """
-    def __init__(self, dir_path):
+
+    def __init__(
+        self,
+        dir_path,
+        transform=transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        ),
+    ):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
         """
         self.load_videos(dir_path)
-        self.feat_extractor = torchvision.models.resnet34(pretrained=True)
-        self.feat_extractor.fc = torch.nn.Identity()
+        self.transform = transform
 
     def load_videos(self, dir_path):
         """
@@ -123,41 +138,38 @@ class algonauts_video(Dataset):
         onlyfiles = [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
 
         # Convert each file to Video object
-        self.videos = [] 
+        self.videos = []
         for i, f in enumerate(onlyfiles):
-            self.videos.append(Video(dir_path+f))
+            self.videos.append(Video(dir_path + f))
             if i == 100:
                 break
 
     def __getitem__(self, idx):
-		# This is the video array
-        data = torch.tensor(self.videos[idx].data)
-		
-		# Define transform
-        data_transform = transforms.Compose([
-			transforms.Normalize(mean=[0.485, 0.456, 0.406],
-								 std=[0.229, 0.224, 0.225])
-        ])
-		
-        data = data.permute(0, 3, 1, 2)
-        data = data_transform(data.float())
+        # This is the video array
+        data = self.videos[idx].data
+        data = torch.tensor(data)
 
-		# Apply pre-trained model to data
-        data =  self.feat_extractor(data)
+        # (B, C, H, W)
+        data = data.permute(0, 3, 1, 2)
+
+        # Apply transformation if applicable
+        if self.transform:
+            data = self.transform(data.float())
 
         return data
 
     def __len__(self):
         return torch.tensor(len(self.videos))
 
-if __name__ == "__main__":
-    dir_path = "/home/andrew_work/neuromatch/Algonauts2021_devkit/participants_data/AlgonautsVideos268_All_30fpsmax/"
 
-    vid_data = algonauts_videos(dir_path)
+# if __name__ == "__main__":
+#     dir_path = "/home/andrew_work/neuromatch/Algonauts2021_devkit/participants_data/AlgonautsVideos268_All_30fpsmax/"
 
-    ### TEST PCA STUFF ###
-    vid_vecs = np.stack([vid.to_vec() for vid in vid_data])
-    from sklearn.decomposition import PCA, IncrementalPCA
-    ipca = IncrementalPCA(n_components=10, batch_size=10)
-    ipca.fit(vid_vecs)
-    print(pca.explained_variance_ratio_)
+#     vid_data = algonauts_videos(dir_path)
+
+#     ### TEST PCA STUFF ###
+#     vid_vecs = np.stack([vid.to_vec() for vid in vid_data])
+#     from sklearn.decomposition import PCA, IncrementalPCA
+#     ipca = IncrementalPCA(n_components=10, batch_size=10)
+#     ipca.fit(vid_vecs)
+#     print(pca.explained_variance_ratio_)
