@@ -9,6 +9,9 @@ from torchvision import transforms
 import torchvision.models
 import torch
 from torchvision.transforms.transforms import Resize, ToTensor
+import random, os
+from glob import glob
+
 
 class Video:
     """
@@ -23,84 +26,9 @@ class Video:
         self.path = path
         self.data = skvideo.io.vread(path)
         self.shape = self.data.shape
-        self.downsample()
 
-    def downsample(self):
-        """
-        Some of the videos are 24 FPS, some are 30 FPS. For the 30 FPS, we drop
-        every 5th frame
-        """
-        # Get the number we need to remove using the original shape
-        num_to_remove = self.data.shape[0] - 45
-
-        # Drop last few frames so that video is divisible by 5
-        if self.data.shape[0] % 5 != 0:
-            num_to_remove -= self.data.shape[0] % 5
-            self.data = self.data[: -(self.data.shape[0] % 5)]
-
-        # Split video into chunks of 5 frames each - 5 chosen arbitrarily
-        self.data = np.split(self.data, int(self.data.shape[0] / 5), axis=0)
-
-        # Iteratively drop frames from each chunk until we've matched lowest frame count (45)
-        removed = 0
-        i = 0
-        while removed < num_to_remove:
-            self.data[i] = self.data[i][:-1]
-            i = (i + 1) % len(self.data)
-            removed += 1
-
-        # Concatenate all the splits)
-        self.data = np.concatenate(self.data)
-
-        # Update shape
-        self.shape = self.data.shape
-
-    def to_vec(self):
-        """
-        (num_frames x rows x columns x color_channels) --> 1D
-        """
-        assert len(self.data.shape) == 4, "data is already in vector form"
-        return self.data.flatten()
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-
-#    def play(self):
-#        """
-#        Plays video
-#        """
-#        # Create a VideoCapture object and read from input file
-#        cap = cv2.VideoCapture(self.path)
-#
-#        # Check if camera opened successfully
-#        if (cap.isOpened()== False):
-#          print("Error opening video  file")
-#
-#        # Read until video is completed
-#        while(cap.isOpened()):
-#
-#          # Capture frame-by-frame
-#          ret, frame = cap.read()
-#          if ret == True:
-#
-#            # Display the resulting frame
-#            cv2.imshow('Frame', frame)
-#
-#            # Press Q on keyboard to  exit
-#            if cv2.waitKey(25) & 0xFF == ord('q'):
-#              break
-#
-#          # Break the loop
-#          else:
-#            break
-#
-#        # When everything done, release
-#        # the video capture object
-#        cap.release()
-#
-#        # Closes all the frames
-#        cv2.destroyAllWindows()
+    def get_frames(self):
+        return np.split(self.data, self.data.shape[0], axis=0)
 
 
 class AlgonautsImages(Dataset):
@@ -109,25 +37,22 @@ class AlgonautsImages(Dataset):
     """
 
     def __init__(
-            self,
-            dir_path,
-            transform=transforms.Compose(
-                [
-                    transforms.Resize((64, 64)),
-                    # transforms.Normalize(
-                    #     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    # ),
-                    ]
-                ),
-            ):
+        self,
+        dir_path,
+        num_videos,
+        transform=transforms.Compose(
+            [transforms.Resize((224, 224)), transforms.ToTensor()]
+        ),
+    ):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
         """
-        self.load_videos(dir_path)
+        self.num_videos = num_videos
+        self.frames = self.load_frames(dir_path)
         self.transform = transform
 
-    def load_videos(self, dir_path):
+    def load_frames(self, dir_path):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
@@ -135,29 +60,27 @@ class AlgonautsImages(Dataset):
             self.videos (list of video objects)
         """
         # Grab all the file names
-        onlyfiles = [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
+        files = glob(os.path.join(dir_path, "*"))
+        self.selected_vids = random.sample(files, self.num_videos)
 
-        # Convert each file to Video object
-        self.videos = []
-        for i, f in enumerate(onlyfiles):
-            self.videos.append(Video(dir_path + f))
-            if i == 100:
-                # Concatenate all the frames together
-                self.images = torch.cat([torch.tensor(self.videos[i].data) for i in range(100)])
-                break
+        frames = []
+        for f in self.selected_vids:
+            frames += Video(f).get_frames()
+
+        return frames
 
     def __getitem__(self, idx):
         # Grab image at index
-        data = self.images[idx]
+        data = self.frames[idx][0, :, :, :]
 
         # Apply transformation if applicable
         if self.transform:
-            data = np.asarray(self.transform(Image.fromarray(data.numpy())))
-            data = torch.tensor(data).permute(2, 0, 1).float()
+            data = Image.fromarray(data, "RGB")
+            data = self.transform(data)
             data = data.float()
             data -= data.min()
-            data /= (data.max() - data.min())
+            data /= data.max() - data.min()
         return data
 
     def __len__(self):
-        return torch.tensor(len(self.videos))
+        return torch.tensor(len(self.frames))
