@@ -8,7 +8,7 @@ from os.path import isfile, join
 from torchvision import transforms
 import torchvision.models
 import torch
-from torchvision.transforms.transforms import Resize, ToTensor
+from torchvision.transforms.transforms import Normalize, Resize, ToTensor
 import random, os
 from glob import glob
 
@@ -41,7 +41,14 @@ class AlgonautsImages(Dataset):
         dir_path,
         num_videos,
         transform=transforms.Compose(
-            [transforms.ToTensor(), transforms.Resize((224, 224))]
+            [
+                transforms.ToTensor(),
+                transforms.Resize((224, 224)),
+                transforms.Normalize(
+                    torch.tensor([0.6096, 0.5945, 0.5317]),
+                    torch.tensor([0.2046, 0.2017, 0.2060]),
+                ),
+            ]
         ),
     ):
         """

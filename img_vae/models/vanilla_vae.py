@@ -162,9 +162,13 @@ class VanillaVAE(BaseVAE):
             -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0
         )
 
-        print(recons_loss.item(), kld_loss.item())
+        loss = torch.clone(recons_loss)
 
-        loss = recons_loss + kld_weight * kld_loss
+        if torch.isfinite(kld_loss):
+            loss += kld_weight * kld_loss
+
+        print(loss.item(), recons_loss.item(), kld_loss.item())
+
         return {"loss": loss, "Reconstruction_Loss": recons_loss, "KLD": -kld_loss}
 
     def sample(self, num_samples: int, current_device: int, **kwargs) -> Tensor:

@@ -11,12 +11,11 @@ import numpy as np
 ### HYPER PARAMETERS ###
 latent_dim = 512
 epochs = 100
-batch_size = 256
+batch_size = 64
 num_videos = 100
 lr = 0.005
 M_N = 0.005
 update_step = 10
-log_nans = True
 grad_clip = 5
 deterministic = True
 seed = 5
@@ -50,11 +49,6 @@ def train(train_loader):
 
         for i, img in enumerate(train_loader):
 
-            if log_nans and (
-                torch.any(torch.isinf(img)) or torch.any(torch.isnan(img))
-            ):
-                print("INPUTS are NAN or INF")
-
             img = img.to(device)
 
             # Reset them gradients
@@ -63,26 +57,17 @@ def train(train_loader):
             # Forward pass
             ex = model(img)
 
-            if log_nans and (
-                torch.any(torch.isinf(ex[0])) or torch.any(torch.isnan(ex[0]))
-            ):
-                print("OUTPUTS are NAN or INF")
-
             loss = loss_function(*ex, M_N=M_N)
 
             # Backward pass
             loss["loss"].backward()
 
-            print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
+            # print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
 
             if grad_clip:
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip)
 
-            print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
-
-            # if log_nans:
-            #     for name, param in model.named_parameters():
-            #         print(name, torch.isfinite(param.grad).all())
+            # print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
 
             # Update weights
             optimizer.step()
