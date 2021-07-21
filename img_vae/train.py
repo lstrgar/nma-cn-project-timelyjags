@@ -7,9 +7,10 @@ import torch.nn as nn
 
 ### HYPER PARAMETERS ###
 latent_dim = 3
-epochs = 200
+epochs = 1 
 batch_size = 256
-num_videos = 10
+num_videos = 1000
+clip = 5
 lr = 0.005
 M_N = 0.005
 ########################
@@ -39,7 +40,6 @@ def train(train_loader):
 
             # Reset them gradients
             optimizer.zero_grad()
-
             img = img.to(device)
 
             # Forward pass
@@ -53,6 +53,9 @@ def train(train_loader):
             # Backward pass
             loss["loss"].backward()
 
+            # Clip them gradients
+            torch.nn.utils.clip_grad_norm(model.parameters(), clip)
+
             # Update weights
             optimizer.step()
 
@@ -62,10 +65,18 @@ def train(train_loader):
         # Compute average loss over the epoch
         print(total_loss / len(imgs))
 
+		# Save current model iteration
+        torch.save({
+	        "epoch": epoch,
+		    "model_state_dict": model.state_dict(),
+		    "optimizer_state_dict": optimizer.state_dict(),
+		    "loss": loss,
+            }, './img_vae.pt')
+
 
 if __name__ == "__main__":
     imgs = AlgonautsImages(
-        dir_path="/home/luke/work/nma-cn-project-timelyjags/AlgonautsVideos268_All_30fpsmax/",
+        dir_path="/home/andrewulmer/neuromatch/Algonauts2021_devkit/participants_data/AlgonautsVideos268_All_30fpsmax/",
         num_videos=num_videos,
     )
     train_loader = DataLoader(imgs, batch_size=batch_size, shuffle=True, num_workers=2)
