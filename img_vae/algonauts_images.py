@@ -41,7 +41,7 @@ class AlgonautsImages(Dataset):
         dir_path,
         num_videos,
         transform=transforms.Compose(
-            [transforms.Resize((224, 224)), transforms.ToTensor()]
+            [transforms.ToTensor(), transforms.Resize((224, 224))]
         ),
     ):
         """
@@ -66,7 +66,6 @@ class AlgonautsImages(Dataset):
         frames = []
         for f in self.selected_vids:
             frames += Video(f).get_frames()
-
         return frames
 
     def __getitem__(self, idx):
@@ -75,11 +74,9 @@ class AlgonautsImages(Dataset):
 
         # Apply transformation if applicable
         if self.transform:
-            data = Image.fromarray(data, "RGB")
             data = self.transform(data)
-            data = data.float()
-            data -= data.min()
-            data /= data.max() - data.min()
+            # data -= data.min()
+            # data /= data.max() - data.min()
         return data
 
     def __len__(self):

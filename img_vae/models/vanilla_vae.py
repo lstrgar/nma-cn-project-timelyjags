@@ -47,6 +47,9 @@ class VanillaVAE(BaseVAE):
         self.fc_mu = nn.Linear(hidden_dims[-1] * self.dim, latent_dim)
         self.fc_var = nn.Linear(hidden_dims[-1] * self.dim, latent_dim)
 
+        torch.nn.init.zeros_(self.fc_var.weight)
+        torch.nn.init.zeros_(self.fc_var.bias)
+
         # Build Decoder
         modules = []
 
