@@ -13,7 +13,9 @@ class VanillaVAE(BaseVAE):
         latent_dim: int,
         hidden_dims: List = None,
         input_shape=(224, 224),
-        **kwargs
+        log_var_min=-5,
+        log_var_max=5,
+        **kwargs,
     ) -> None:
         super(VanillaVAE, self).__init__()
 
@@ -49,6 +51,9 @@ class VanillaVAE(BaseVAE):
 
         torch.nn.init.zeros_(self.fc_var.weight)
         torch.nn.init.zeros_(self.fc_var.bias)
+
+        self.log_var_min = log_var_min
+        self.log_var_max = log_var_max
 
         # Build Decoder
         modules = []
@@ -120,7 +125,7 @@ class VanillaVAE(BaseVAE):
         result = self.final_layer(result)
         return result
 
-    def reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
+    def reparameterize(self, mu: Tensor, logvar: Tensor, temperature=0.01) -> Tensor:
         """
         Reparameterization trick to sample from N(mu, var) from
         N(0,1).
@@ -130,7 +135,7 @@ class VanillaVAE(BaseVAE):
         """
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return eps * std + mu
+        return (temperature * eps * std) + mu
 
     def test_encoder_fwd(self, x):
         ## (batch, channels, H, W)
@@ -139,6 +144,7 @@ class VanillaVAE(BaseVAE):
 
     def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
         mu, log_var = self.encode(input)
+        log_var = torch.clamp(log_var, self.log_var_min, self.log_var_max)
         z = self.reparameterize(mu, log_var)
         return [self.decode(z), input, mu, log_var]
 
@@ -155,7 +161,7 @@ class VanillaVAE(BaseVAE):
         mu = args[2]
         log_var = args[3]
 
-        kld_weight = kwargs["M_N"]  # Account for the minibatch samples from the dataset
+        kld_weight = kwargs["beta"]
         recons_loss = F.mse_loss(recons, input)
 
         kld_loss = torch.mean(
@@ -167,7 +173,7 @@ class VanillaVAE(BaseVAE):
         if torch.isfinite(kld_loss):
             loss += kld_weight * kld_loss
 
-        print(loss.item(), recons_loss.item(), kld_loss.item())
+        print(loss.item(), recons_loss.item(), kld_weight * kld_loss.item())
 
         return {"loss": loss, "Reconstruction_Loss": recons_loss, "KLD": -kld_loss}
 

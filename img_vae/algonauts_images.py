@@ -72,7 +72,10 @@ class AlgonautsImages(Dataset):
 
         frames = []
         for f in self.selected_vids:
+            print(f)
             frames += Video(f).get_frames()
+
+        frames = frames[:1]
         return frames
 
     def __getitem__(self, idx):
