@@ -11,10 +11,12 @@ class VanillaVAE(BaseVAE):
         self,
         in_channels: int,
         latent_dim: int,
+        beta,
         hidden_dims: List = None,
         input_shape=(224, 224),
-        log_var_min=-5,
-        log_var_max=5,
+        log_var_min=-10,
+        log_var_max=10,
+        temperature=0.01,
         **kwargs,
     ) -> None:
         super(VanillaVAE, self).__init__()
@@ -54,6 +56,8 @@ class VanillaVAE(BaseVAE):
 
         self.log_var_min = log_var_min
         self.log_var_max = log_var_max
+        self.temperature = temperature
+        self.beta = beta
 
         # Build Decoder
         modules = []
@@ -125,7 +129,7 @@ class VanillaVAE(BaseVAE):
         result = self.final_layer(result)
         return result
 
-    def reparameterize(self, mu: Tensor, logvar: Tensor, temperature=0.01) -> Tensor:
+    def reparameterize(self, mu: Tensor, logvar: Tensor, temperature) -> Tensor:
         """
         Reparameterization trick to sample from N(mu, var) from
         N(0,1).
@@ -145,7 +149,7 @@ class VanillaVAE(BaseVAE):
     def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
         mu, log_var = self.encode(input)
         log_var = torch.clamp(log_var, self.log_var_min, self.log_var_max)
-        z = self.reparameterize(mu, log_var)
+        z = self.reparameterize(mu, log_var, self.temperature)
         return [self.decode(z), input, mu, log_var]
 
     def loss_function(self, *args, **kwargs) -> dict:
@@ -161,21 +165,24 @@ class VanillaVAE(BaseVAE):
         mu = args[2]
         log_var = args[3]
 
-        kld_weight = kwargs["beta"]
-        recons_loss = F.mse_loss(recons, input)
+        kld_weight = self.beta
+        mse_loss = F.mse_loss(recons, input)
 
         kld_loss = torch.mean(
             -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0
         )
 
-        loss = torch.clone(recons_loss)
+        loss = torch.clone(mse_loss)
 
         if torch.isfinite(kld_loss):
             loss += kld_weight * kld_loss
 
-        print(loss.item(), recons_loss.item(), kld_weight * kld_loss.item())
-
-        return {"loss": loss, "Reconstruction_Loss": recons_loss, "KLD": -kld_loss}
+        return {
+            "loss": loss,
+            "MSE": mse_loss,
+            "KLD": kld_loss,
+            "KLD*beta": kld_weight * kld_loss,
+        }
 
     def sample(self, num_samples: int, current_device: int, **kwargs) -> Tensor:
         """

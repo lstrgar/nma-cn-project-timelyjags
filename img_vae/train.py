@@ -1,54 +1,56 @@
 from torch.autograd import grad
-from models import *
+from torch.nn.modules.module import ModuleAttributeError
+from models import VanillaVAE
 import torch.optim as optim
 from algonauts_images import AlgonautsImages
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import torch.nn as nn
+import torch, torch.nn as nn
 import random
 import numpy as np
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
-### HYPER PARAMETERS ###
-latent_dim = 512
-epochs = 500
-num_videos = 1
+#####################################
+#####################################
+latent_dim = 1024
+epochs = 1000
+log_var_min = -10
+log_var_max = 10
+temperature = 0.01
+
 lr = 0.005
+batch_size = 256
+num_videos = 100
+num_workers = 8
 update_step = 10
 grad_clip = None
-batch_size = 1
+
 deterministic = True
+w_parallel = True
 seed = 5
-########################
-
-torch.autograd.set_detect_anomaly(True)
-
-if deterministic:
-    torch.manual_seed(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-
-model = VanillaVAE(in_channels=3, latent_dim=latent_dim)
-
-optimizer = optim.Adam(model.parameters(), lr=lr)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-loss_function = model.loss_function
-
-# if torch.cuda.device_count() > 1:
-#     model = nn.DataParallel(model)
-
-model.to(device)
+video_dir_path = "/home/luke/work/nma-cn-project-timelyjags/img_vae/test_videos/"
+#####################################
+#####################################
 
 
-def train(train_loader, beta):
+def train(model, trainloader):
+
+    try:
+        loss_function = model.loss_function
+    except ModuleAttributeError:
+        loss_function = model.module.loss_function
 
     for epoch in range(epochs):
 
-        running_loss = 0.0
+        # monitor all three losses
+        kld_running_loss = 0.0
+        mse_running_loss = 0.0
+        total_running_loss = 0.0
 
-        for i, img in enumerate(train_loader):
+        for i, img in enumerate(trainloader):
 
+            # Input to device
             img = img.to(device)
 
             # Reset them gradients
@@ -57,35 +59,39 @@ def train(train_loader, beta):
             # Forward pass
             ex = model(img)
 
-            recons = torch.clone(ex[0][0])
-            recons -= torch.min(recons)
-            recons /= torch.max(recons) - torch.min(recons)
-            plt.imsave("recons.jpg", recons.permute(1, 2, 0).cpu().detach().numpy())
-
-            loss = loss_function(*ex, beta=beta)
+            # Compute loss
+            loss = model.module.loss_function(*ex)
 
             # Backward pass
             loss["loss"].backward()
 
-            # print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
-
+            # If clipping gradients
             if grad_clip:
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip)
-
-            # print(torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters()])))
 
             # Update weights
             optimizer.step()
 
-            # Add to total loss
-            running_loss += loss["loss"].item()
+            # Update running losses
+            kld_running_loss += loss["KLD"].item()
+            mse_running_loss += loss["MSE"].item()
+            total_running_loss += loss["loss"].item()
 
+            # Every update_step batches print and reset running loss
             if i % update_step == update_step - 1:
                 print(
-                    "[%d, %5d] loss: %.3f"
-                    % (epoch + 1, i + 1, running_loss / update_step)
+                    "[%d, %5d] loss: %.3f, kld: %.3f, mse: %.3f"
+                    % (
+                        epoch + 1,
+                        i + 1,
+                        total_running_loss / update_step,
+                        kld_running_loss / update_step,
+                        mse_running_loss / update_step,
+                    )
                 )
-                running_loss = 0.0
+                kld_running_loss = 0.0
+                mse_running_loss = 0.0
+                total_running_loss = 0.0
 
         # Save current model iteration
         torch.save(
@@ -100,16 +106,45 @@ def train(train_loader, beta):
 
 
 if __name__ == "__main__":
-    imgs = AlgonautsImages(
-        dir_path="/home/luke/work/nma-cn-project-timelyjags/img_vae/test_videos/",
-        num_videos=num_videos,
+
+    # Manually set random seed
+    if deterministic:
+        torch.manual_seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
+    # Load videos, config dataloader
+    print("Loading dataset...")
+    trainset = AlgonautsImages(dir_path=video_dir_path, num_videos=num_videos,)
+    trainloader = DataLoader(
+        trainset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
-    inp = imgs[0]
-    inp -= torch.min(inp)
-    inp /= torch.max(inp) - torch.min(inp)
-    plt.imsave("./input.jpg", inp.permute(1, 2, 0).cpu().numpy())
-    c, h, w = imgs[0].size()
+
+    # Compute KLD loss scaler from input dims + batch size
+    c, h, w = trainset[0].size()
     beta = 1 / (c * h * w * batch_size)
-    print(beta)
-    train_loader = DataLoader(imgs, batch_size=batch_size, shuffle=False, num_workers=2)
-    train(train_loader, beta=beta)
+
+    print("\nBuilding model...")
+    # Instantiate network
+    model = VanillaVAE(
+        in_channels=c,
+        latent_dim=latent_dim,
+        beta=beta,
+        log_var_min=log_var_min,
+        log_var_max=log_var_max,
+        temperature=temperature,
+    )
+
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # Parallelize if applicable
+    if torch.cuda.device_count() > 1 and w_parallel:
+        model = nn.DataParallel(model)
+
+    # Move network to available device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    # leggo
+    print("\nBeginning training...\n")
+    train(model=model, trainloader=trainloader)

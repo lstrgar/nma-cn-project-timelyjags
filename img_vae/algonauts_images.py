@@ -11,6 +11,7 @@ import torch
 from torchvision.transforms.transforms import Normalize, Resize, ToTensor
 import random, os
 from glob import glob
+from tqdm import tqdm
 
 
 class Video:
@@ -71,11 +72,9 @@ class AlgonautsImages(Dataset):
         self.selected_vids = random.sample(files, self.num_videos)
 
         frames = []
-        for f in self.selected_vids:
-            print(f)
+        for f in tqdm(self.selected_vids):
             frames += Video(f).get_frames()
 
-        frames = frames[:1]
         return frames
 
     def __getitem__(self, idx):
@@ -85,8 +84,6 @@ class AlgonautsImages(Dataset):
         # Apply transformation if applicable
         if self.transform:
             data = self.transform(data)
-            # data -= data.min()
-            # data /= data.max() - data.min()
         return data
 
     def __len__(self):
