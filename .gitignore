@@ -1,2 +1,9 @@
 /notebooks/.ipynb_checkpoints
 **/__pycache__/
+/AlgonautsVideos268_All_30fpsmax/
+/img_vae/img_vae.pt
+/img_vae/input.jpg
+/img_vae/recons.jpg
+/img_vae/test_videos/
+/participants_data.zip
+/participants_data_v2021/

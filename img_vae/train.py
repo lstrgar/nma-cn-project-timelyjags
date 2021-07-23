@@ -14,7 +14,7 @@ from tqdm import tqdm
 #####################################
 #####################################
 latent_dim = 1024
-epochs = 1000
+epochs = 2000
 log_var_min = -10
 log_var_max = 10
 temperature = 0.01
@@ -30,11 +30,13 @@ deterministic = True
 w_parallel = True
 seed = 5
 video_dir_path = "/home/luke/work/nma-cn-project-timelyjags/img_vae/test_videos/"
+load_from_ckpt = True
+ckpt_path = "/home/luke/work/nma-cn-project-timelyjags/img_vae/img_vae.pt"
 #####################################
 #####################################
 
 
-def train(model, trainloader):
+def train(model, optimizer, trainloader):
 
     try:
         loss_function = model.loss_function
@@ -60,7 +62,7 @@ def train(model, trainloader):
             ex = model(img)
 
             # Compute loss
-            loss = model.module.loss_function(*ex)
+            loss = loss_function(*ex)
 
             # Backward pass
             loss["loss"].backward()
@@ -135,8 +137,6 @@ if __name__ == "__main__":
         temperature=temperature,
     )
 
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-
     # Parallelize if applicable
     if torch.cuda.device_count() > 1 and w_parallel:
         model = nn.DataParallel(model)
@@ -145,6 +145,21 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    # Initialize Adam optimizer
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # If continuing an earlier training session...
+    if load_from_ckpt:
+        print("Loading checkpoint for continued training...")
+        checkpoint = torch.load(ckpt_path)
+        try:
+            model.load_state_dict(checkpoint["model_state_dict"])
+        except ModuleAttributeError:
+            model.module.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        print("State dicts matched")
+        print("Last loss was %.3f" % checkpoint["loss"]["loss"])
+
     # leggo
     print("\nBeginning training...\n")
-    train(model=model, trainloader=trainloader)
+    train(model=model, optimizer=optimizer, trainloader=trainloader)
