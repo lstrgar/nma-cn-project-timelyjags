@@ -176,4 +176,5 @@ if __name__ == "__main__":
     print(
         f"epochs: {epochs}, lr: {lr}, batch_size: {batch_size}, len(trainset): {len(trainset)}"
     )
+    # model.train()
     # train(model=model, optimizer=optimizer, trainloader=trainloader)
