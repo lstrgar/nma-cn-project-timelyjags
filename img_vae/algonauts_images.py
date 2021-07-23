@@ -41,6 +41,7 @@ class AlgonautsImages(Dataset):
         self,
         dir_path,
         num_videos,
+        load_single_frames = False,
         transform=transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -57,10 +58,10 @@ class AlgonautsImages(Dataset):
             dir_path (str): defines the directory where the mp4 videos are stored
         """
         self.num_videos = num_videos
-        self.frames = self.load_frames(dir_path)
+        self.frames = self.load_frames(dir_path, load_single_frames)
         self.transform = transform
 
-    def load_frames(self, dir_path):
+    def load_frames(self, dir_path, load_single_frames):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
@@ -72,9 +73,13 @@ class AlgonautsImages(Dataset):
         self.selected_vids = random.sample(files, self.num_videos)
 
         frames = []
-        for f in tqdm(self.selected_vids):
-            frames += Video(f).get_frames()
-
+        if load_single_frames:
+            for f in tqdm(self.selected_vids):
+                frames += [Video(f).get_frames()[0]]
+        else:
+            for f in tqdm(self.selected_vids):
+                frames += Video(f).get_frames()
+        
         return frames
 
     def __getitem__(self, idx):
