@@ -1,3 +1,4 @@
+from numpy.lib.npyio import save
 import skvideo.io
 import numpy as np
 from PIL import Image
@@ -16,20 +17,22 @@ from tqdm import tqdm
 
 class Video:
     """
-    Wrapper util for dealing with mp4 files in python
+    Wrapper util mp4 files
     """
 
     def __init__(self, path):
         """
         INPUTS:
-            f_name (str): path to mp4 file
+            path (str): path to mp4 file
         """
         self.path = path
+        # (F, H, W, C)
         self.data = skvideo.io.vread(path)
         self.shape = self.data.shape
 
     def get_frames(self):
-        return np.split(self.data, self.data.shape[0], axis=0)
+        # Split and return all frames as a list of (H, W, C)
+        return np.split(self.data, self.shape[0], axis=0)
 
 
 class AlgonautsImages(Dataset):
@@ -41,7 +44,8 @@ class AlgonautsImages(Dataset):
         self,
         dir_path,
         num_videos,
-        load_single_frames = False,
+        video_ids=None,
+        load_single_frames=False,
         transform=transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -56,8 +60,17 @@ class AlgonautsImages(Dataset):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
+            num_videos (int): number of videos to load frames from
+            video_ids (list[int]): zero-based indices of desired videos to load from (mutually exclusive with num_videos)
+            load_single_frames (boolean): if true only load the first frame from each selected video
         """
+
+        assert (
+            num_videos or video_ids
+        ), "num_videos and video_ids are mutually exclusive. please provide only one"
+
         self.num_videos = num_videos
+        self.video_ids = video_ids
         self.frames = self.load_frames(dir_path, load_single_frames)
         self.transform = transform
 
@@ -65,31 +78,44 @@ class AlgonautsImages(Dataset):
         """
         INPUTS:
             dir_path (str): defines the directory where the mp4 videos are stored
+            load_single_frames (boolean): if true load only the first frame from each selected video
         OUTPUTS:
-            self.videos (list of video objects)
+            frames (list of video frames)
         """
         # Grab all the file names
-        files = glob(os.path.join(dir_path, "*"))
-        self.selected_vids = random.sample(files, self.num_videos)
+        video_list = glob(dir_path + "*.mp4")
+        video_list.sort()
 
+        # Select random subset of videos or by specified indices
+        if self.video_ids:
+            self.selected_vids = random.sample(video_list, self.num_videos)
+        else:
+            self.selected_vids = [
+                vid_path for i, vid_path in enumerate(video_list) if i in self.video_ids
+            ]
+
+        # Load frames
         frames = []
+        # Only first frame for each video
         if load_single_frames:
             for f in tqdm(self.selected_vids):
                 frames += [Video(f).get_frames()[0]]
+        # All frames
         else:
             for f in tqdm(self.selected_vids):
                 frames += Video(f).get_frames()
-        
+
         return frames
 
     def __getitem__(self, idx):
-        # Grab image at index
+        # Grab frame at index
         data = self.frames[idx][0, :, :, :]
 
-        # Apply transformation if applicable
+        # Apply transformation if available
         if self.transform:
             data = self.transform(data)
         return data
 
     def __len__(self):
+        # Count number of frames in dataset
         return torch.tensor(len(self.frames))
