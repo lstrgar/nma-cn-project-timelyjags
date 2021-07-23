@@ -1,16 +1,7 @@
-from numpy.lib.npyio import save
-import skvideo.io
-import numpy as np
-from PIL import Image
-import random
-from torch.utils.data import Dataset
-from os import listdir
-from os.path import isfile, join
-from torchvision import transforms
-import torchvision.models
+import skvideo.io, numpy as np, random
 import torch
-from torchvision.transforms.transforms import Normalize, Resize, ToTensor
-import random, os
+from torch.utils.data import Dataset
+from torchvision.transforms.transforms import Compose, Normalize, Resize, ToTensor
 from glob import glob
 from tqdm import tqdm
 
@@ -46,11 +37,11 @@ class AlgonautsImages(Dataset):
         num_videos,
         video_ids=None,
         load_single_frames=False,
-        transform=transforms.Compose(
+        transform=Compose(
             [
-                transforms.ToTensor(),
-                transforms.Resize((224, 224)),
-                transforms.Normalize(
+                ToTensor(),
+                Resize((224, 224)),
+                Normalize(
                     torch.tensor([0.6096, 0.5945, 0.5317]),
                     torch.tensor([0.2046, 0.2017, 0.2060]),
                 ),
