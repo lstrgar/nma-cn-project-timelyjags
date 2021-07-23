@@ -78,7 +78,7 @@ class AlgonautsImages(Dataset):
         video_list.sort()
 
         # Select random subset of videos or by specified indices
-        if self.video_ids:
+        if self.num_videos:
             self.selected_vids = random.sample(video_list, self.num_videos)
         else:
             self.selected_vids = [
